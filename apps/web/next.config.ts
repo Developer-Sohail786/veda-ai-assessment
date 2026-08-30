@@ -4,16 +4,9 @@ const nextConfig: NextConfig = {
   reactCompiler: true,
 
   serverExternalPackages: [
+    "pdf-parse",
     "@napi-rs/canvas",
   ],
-
-  outputFileTracingIncludes: {
-    "/api/process/**": [
-      "./public/pdfjs/standard_fonts/**",
-      "./lib/pdf.worker.mjs",
-      "./node_modules/@napi-rs/canvas/**",
-    ],
-  },
 };
 
 export default nextConfig;
