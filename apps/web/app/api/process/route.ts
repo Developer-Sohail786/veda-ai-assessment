@@ -25,12 +25,35 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const questionBuffer = Buffer.from(await questionPaper.arrayBuffer());
-    const answerBuffer = Buffer.from(await answerSheet.arrayBuffer());
+    const questionBuffer = Buffer.from(
+      await questionPaper.arrayBuffer()
+    );
+
+    const answerBuffer = Buffer.from(
+      await answerSheet.arrayBuffer()
+    );
+
+    console.log("PROCESS START");
+    console.log("Question paper:", {
+      name: questionPaper.name,
+      type: questionPaper.type,
+      size: questionPaper.size,
+    });
+
+    console.log("Answer sheet:", {
+      name: answerSheet.name,
+      type: answerSheet.type,
+      size: answerSheet.size,
+    });
 
     const questionPages = await pdfToImages(
       questionBuffer,
       questionPaper.type
+    );
+
+    console.log(
+      "Question pages:",
+      questionPages.length
     );
 
     const answerPages = await pdfToImages(
@@ -38,8 +61,23 @@ export async function POST(request: NextRequest) {
       answerSheet.type
     );
 
+    console.log(
+      "Answer pages:",
+      answerPages.length
+    );
+
     const questions = await extractQuestions(
       questionPages.map((page) => page.image)
+    );
+
+    console.log(
+      "QUESTIONS EXTRACTED:",
+      questions.length
+    );
+
+    console.log(
+      "QUESTION NUMBERS:",
+      questions.map((question) => question.number)
     );
 
     const answers = await extractAnswers(
@@ -47,7 +85,31 @@ export async function POST(request: NextRequest) {
       questions
     );
 
-    const mappings = mapAnswers(questions, answers);
+    console.log(
+      "ANSWERS EXTRACTED:",
+      answers.length
+    );
+
+    console.log(
+      "ANSWER QUESTION NUMBERS:",
+      answers.map((answer) => answer.questionNumber)
+    );
+
+    const mappings = mapAnswers(
+      questions,
+      answers
+    );
+
+    console.log(
+      "MAPPINGS:",
+      mappings.map((mapping) => ({
+        questionId: mapping.questionId,
+        answerId: mapping.answerId,
+        status: mapping.status,
+      }))
+    );
+
+    console.log("PROCESS COMPLETE");
 
     return NextResponse.json({
       questions,
@@ -55,16 +117,20 @@ export async function POST(request: NextRequest) {
       mappings,
       answerSheetPages: answerPages,
     });
- } catch (error) {
-  console.error("PROCESS API ERROR:", error);
+  } catch (error) {
+    console.error(
+      "PROCESS API ERROR:",
+      error
+    );
 
-  return NextResponse.json(
-    {
-      error:
-        error instanceof Error
-          ? error.message
-          : "Failed to process assessment.",
-    },
-    { status: 500 },
-  );
- }}
+    return NextResponse.json(
+      {
+        error:
+          error instanceof Error
+            ? error.message
+            : "Failed to process assessment.",
+      },
+      { status: 500 }
+    );
+  }
+}
