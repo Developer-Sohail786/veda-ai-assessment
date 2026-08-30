@@ -1,0 +1,93 @@
+@import "tailwindcss";
+
+:root {
+  /* Surfaces */
+  --color-app-bg: #eceae6;
+  --color-app-bg-2: #e2dfda;
+  --color-panel: #ffffff;
+  --color-panel-muted: #f6f5f3;
+  --color-border: #e7e5e1;
+  --color-border-strong: #d9d6d0;
+
+  /* Text */
+  --color-ink: #17140f;
+  --color-ink-soft: #55524b;
+  --color-ink-faint: #918d84;
+
+  /* Brand */
+  --color-accent: #ee6c2f;
+  --color-accent-dark: #d85a20;
+  --color-accent-tint: #fbe2cf;
+  --color-accent-tint-2: #fdeee0;
+
+  /* Ink pill */
+  --color-pill: #17140f;
+
+  /* Status */
+  --color-success: #1c9b56;
+  --color-success-bg: #e3f6ea;
+  --color-danger: #d9432f;
+  --color-danger-bg: #fbe6e2;
+
+  --radius-shell: 28px;
+  --radius-panel: 24px;
+  --radius-card: 18px;
+  --radius-pill: 999px;
+}
+
+@theme inline {
+  --color-app-bg: var(--color-app-bg);
+  --color-app-bg-2: var(--color-app-bg-2);
+  --color-panel: var(--color-panel);
+  --color-panel-muted: var(--color-panel-muted);
+  --color-border: var(--color-border);
+  --color-border-strong: var(--color-border-strong);
+  --color-ink: var(--color-ink);
+  --color-ink-soft: var(--color-ink-soft);
+  --color-ink-faint: var(--color-ink-faint);
+  --color-accent: var(--color-accent);
+  --color-accent-dark: var(--color-accent-dark);
+  --color-accent-tint: var(--color-accent-tint);
+  --color-accent-tint-2: var(--color-accent-tint-2);
+  --color-pill: var(--color-pill);
+  --color-success: var(--color-success);
+  --color-success-bg: var(--color-success-bg);
+  --color-danger: var(--color-danger);
+  --color-danger-bg: var(--color-danger-bg);
+
+  --font-sans: var(--font-bricolage), ui-sans-serif, system-ui, sans-serif;
+  --font-mono: ui-monospace, "SFMono-Regular", Menlo, monospace;
+}
+
+* {
+  -webkit-tap-highlight-color: transparent;
+}
+
+body {
+  background: radial-gradient(
+    120% 140% at 50% -10%,
+    var(--color-app-bg) 0%,
+    var(--color-app-bg-2) 100%
+  );
+  color: var(--color-ink);
+  font-family: var(--font-bricolage), ui-sans-serif, system-ui, sans-serif;
+}
+
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--color-border-strong);
+  border-radius: 999px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+}
