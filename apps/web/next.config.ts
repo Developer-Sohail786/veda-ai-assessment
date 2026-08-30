@@ -7,6 +7,14 @@ const nextConfig: NextConfig = {
     "pdf-parse",
     "@napi-rs/canvas",
   ],
+
+  outputFileTracingIncludes: {
+    "/api/process/**": [
+      "./node_modules/pdf-parse/**",
+      "./node_modules/pdf-parse/node_modules/@napi-rs/canvas/**",
+      "./node_modules/pdf-parse/node_modules/@napi-rs/canvas-linux-x64-gnu/**",
+    ],
+  },
 };
 
 export default nextConfig;
