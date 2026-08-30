@@ -3,43 +3,55 @@ import { gemini } from "./gemini";
 import { questionExtractionSchema } from "./schemas";
 
 const systemPrompt = `
-You extract questions from an exam question paper.
+You are an exam question-paper extraction system.
 
-For every question:
-- Extract the EXACT question number exactly as it appears on the question paper.
-- Extract the question text accurately.
+Your ONLY task is to inspect the provided exam question-paper images
+and extract the actual questions visible in them.
+
+IMPORTANT:
+- Carefully inspect the image visually.
+- Extract EVERY visible question.
 - Preserve the original printed order.
-- Include the page number.
-- Treat labelled sub-parts such as 11(a) and 11(b) as separate questions.
-- Do not include headings, instructions, examples, or answers.
+- Do not invent questions.
+- Do not omit clearly visible questions.
+- Do not return an empty questions array if questions are visible.
 
-QUESTION NUMBERING — CRITICAL:
+QUESTION NUMBERING:
+- Extract the question number EXACTLY as printed.
 - NEVER renumber questions.
-- NEVER replace the printed question number with a sequential number.
-- The printed question number is authoritative.
-- If the paper shows "11(a)", return exactly "11(a)".
-- If the paper shows "11(b)", return exactly "11(b)".
-- Keep the lettered sub-part attached to its parent number.
-- Preserve parentheses, letters, and other meaningful sub-part labels.
-- Do not convert "11(a)" into "6", "7", "11", or any other number.
-- Do not assume that question numbers are sequential.
-- If numbering skips from 5 to 11(a), preserve that numbering exactly.
-- If the paper contains 11(a) and 11(b), return TWO separate questions with numbers "11(a)" and "11(b)".
+- NEVER replace a printed number with a sequential number.
+- Preserve letters, parentheses, dots, and other meaningful labels.
+- If the paper shows "11(a)", return "11(a)".
+- If the paper shows "11(b)", return "11(b)".
+- "11(a)" and "11(b)" MUST be returned as separate questions.
+- Do not convert "11(a)" into "6", "7", or "11".
+- Do not assume question numbers are sequential.
+- If numbering skips from 5 to 11(a), preserve the printed numbering.
+
+QUESTION TEXT:
+- Transcribe the actual question accurately.
+- Preserve the meaning of the original question.
+- Do not include headings or general instructions.
+- Do not include sample answers.
+- Do not include marks as part of the question text unless the marks are naturally part of the printed question.
+
+PAGE:
+- Return the page number on which the question appears.
+- Page numbering starts at 1.
+- If a question appears on page 2, return page: 2.
 
 MARKS:
 
-First inspect the question paper for explicitly printed marks.
+First determine whether marks are explicitly printed for the question.
 
 IF MARKS ARE PRINTED:
 - Use the exact printed mark value.
 - Set marksSource to "paper".
-- Do not modify the value.
-- Determine complexity separately.
+- Do not modify the printed value.
 
 IF MARKS ARE NOT PRINTED:
 - Set marksSource to "ai".
-- DO NOT freely invent a mark value.
-- First classify the question into exactly one complexity level:
+- Determine the expected complexity of the QUESTION.
 
 simple:
 A single definition, fact, identification, or very short response.
@@ -53,44 +65,55 @@ An explanation requiring several relevant points, steps, or concepts.
 detailed:
 A long explanation, multi-part response, derivation, analysis, or complex task.
 
-For AI-estimated marks use this EXACT mapping:
-- simple → 1 mark
-- short → 2 marks
-- moderate → 3 marks
-- detailed → 5 marks
+AI MARK MAPPING:
+- simple → 1
+- short → 2
+- moderate → 3
+- detailed → 5
 
-Do not use 4 marks for AI-estimated questions.
-Do not assign 5 marks to simple or short questions.
-Do not assign 2 marks to a simple definition merely because the answer could contain more detail.
-Do not make all questions worth the same marks.
-
-The complexity must describe the expected answer required by the QUESTION,
-not the student's actual answer.
-
+Never use 4 marks for AI-estimated questions.
 Never use 0 marks.
 
-IMPORTANT EXTRACTION REQUIREMENT:
-- The question paper contains one or more actual questions.
-- You MUST extract every clearly visible question.
-- Never intentionally return an empty questions array.
-- If there are multiple pages, inspect all provided pages.
-- Preserve every visible question and sub-question.
-- Do not stop after identifying only the first few questions.
+IMPORTANT:
+The complexity describes what the question expects from the student,
+NOT what the student actually answered.
 
-Return only structured question data.
+OUTPUT:
+Return structured question data only.
 `;
 
-async function extractQuestionsOnce(images: string[]) {
+function dataUrlToBytes(dataUrl: string): Uint8Array {
+  const commaIndex = dataUrl.indexOf(",");
+
+  if (commaIndex === -1) {
+    throw new Error(
+      "Invalid image data URL."
+    );
+  }
+
+  const base64 = dataUrl.slice(
+    commaIndex + 1
+  );
+
+  return new Uint8Array(
+    Buffer.from(base64, "base64")
+  );
+}
+
+async function extractQuestionsOnce(
+  images: string[]
+) {
   const { object } = await generateObject({
     model: gemini,
     schema: questionExtractionSchema,
     system: systemPrompt,
+
     messages: [
       {
         role: "user",
         content: images.map((image) => ({
           type: "file" as const,
-          data: image,
+          data: dataUrlToBytes(image),
           mediaType: "image/png",
         })),
       },
@@ -98,74 +121,6 @@ async function extractQuestionsOnce(images: string[]) {
   });
 
   return object.questions;
-}
-
-export async function extractQuestions(
-  images: string[]
-) {
-  let lastError: unknown;
-
-  // First attempt
-  try {
-    const questions = await extractQuestionsOnce(images);
-
-    console.log(
-      `Question extraction attempt 1 returned ${questions.length} questions`
-    );
-
-    if (questions.length > 0) {
-      return applyAIMarks(questions);
-    }
-  } catch (error) {
-    lastError = error;
-
-    console.warn(
-      "Question extraction attempt 1 failed:",
-      error
-    );
-  }
-
-  // Retry once
-  try {
-    console.log(
-      "Retrying question extraction..."
-    );
-
-    const questions = await extractQuestionsOnce(images);
-
-    console.log(
-      `Question extraction attempt 2 returned ${questions.length} questions`
-    );
-
-    if (questions.length > 0) {
-      return applyAIMarks(questions);
-    }
-  } catch (error) {
-    lastError = error;
-
-    console.error(
-      "QUESTION EXTRACTION FINAL ERROR:",
-      error
-    );
-
-    if (error instanceof Error) {
-      console.error(
-        "QUESTION EXTRACTION ERROR MESSAGE:",
-        error.message
-      );
-
-      console.error(
-        "QUESTION EXTRACTION ERROR STACK:",
-        error.stack
-      );
-    }
-  }
-
-  throw new Error(
-    lastError instanceof Error
-      ? `Unable to extract questions from the question paper: ${lastError.message}`
-      : "Unable to extract questions from the question paper."
-  );
 }
 
 function applyAIMarks(
@@ -188,7 +143,96 @@ function applyAIMarks(
     return {
       ...question,
       marks:
-        marksByComplexity[question.complexity],
+        marksByComplexity[
+          question.complexity
+        ],
     };
   });
+}
+
+export async function extractQuestions(
+  images: string[]
+) {
+  if (!images.length) {
+    throw new Error(
+      "No question-paper images were generated."
+    );
+  }
+
+  let lastError: unknown;
+
+  /*
+   * First extraction attempt.
+   */
+  try {
+    console.log(
+      "QUESTION EXTRACTION: attempt 1"
+    );
+
+    const questions =
+      await extractQuestionsOnce(images);
+
+    console.log(
+      "QUESTION EXTRACTION: attempt 1 returned",
+      questions.length,
+      "questions"
+    );
+
+    if (questions.length > 0) {
+      return applyAIMarks(questions);
+    }
+
+    lastError = new Error(
+      "The AI returned zero questions."
+    );
+  } catch (error) {
+    lastError = error;
+
+    console.warn(
+      "QUESTION EXTRACTION: attempt 1 failed",
+      error
+    );
+  }
+
+  /*
+   * Retry with the same image data.
+   * The schema requires at least one question,
+   * so a successful response must contain
+   * actual extracted questions.
+   */
+  try {
+    console.log(
+      "QUESTION EXTRACTION: retrying"
+    );
+
+    const questions =
+      await extractQuestionsOnce(images);
+
+    console.log(
+      "QUESTION EXTRACTION: retry returned",
+      questions.length,
+      "questions"
+    );
+
+    if (questions.length > 0) {
+      return applyAIMarks(questions);
+    }
+
+    lastError = new Error(
+      "The AI returned zero questions on the retry."
+    );
+  } catch (error) {
+    lastError = error;
+
+    console.error(
+      "QUESTION EXTRACTION: retry failed",
+      error
+    );
+  }
+
+  throw new Error(
+    lastError instanceof Error
+      ? `Unable to extract questions from the question paper: ${lastError.message}`
+      : "Unable to extract questions from the question paper."
+  );
 }
