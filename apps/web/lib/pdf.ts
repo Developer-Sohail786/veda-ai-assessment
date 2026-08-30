@@ -48,7 +48,7 @@ export async function pdfToImages(
   }
 
   /*
-   * Worker bundled inside the application:
+   * PDF.js worker:
    *
    * apps/web/lib/pdfjs/pdf.worker.mjs
    */
@@ -62,7 +62,7 @@ export async function pdfToImages(
   const workerUrl = pathToFileURL(workerPath).href;
 
   /*
-   * Standard PDF fonts bundled inside the application:
+   * PDF.js standard fonts:
    *
    * apps/web/public/pdfjs/standard_fonts/
    */
@@ -77,7 +77,7 @@ export async function pdfToImages(
   const standardFontUrl =
     pathToFileURL(standardFontPath).href;
 
-  // Import after initializing the canvas globals.
+  // Import after the canvas globals have been initialized.
   const { PDFParse } = await import("pdf-parse");
 
   // Explicitly configure the PDF.js worker.
@@ -91,10 +91,49 @@ export async function pdfToImages(
   });
 
   try {
+    /*
+     * Diagnostic text extraction.
+     *
+     * This tells us whether PDF.js can read the question paper's
+     * underlying text even though its rasterized screenshot may
+     * appear blank.
+     */
+    const textResult = await parser.getText();
+
+    console.log(
+      "PDF TEXT LENGTH:",
+      textResult.text?.length ?? 0
+    );
+
+    console.log(
+      "PDF TEXT:",
+      textResult.text ?? ""
+    );
+
+    /*
+     * Render PDF pages to PNG screenshots.
+     */
     const result = await parser.getScreenshot({
       scale: 2,
       imageDataUrl: true,
     });
+
+    console.log(
+      "PDF SCREENSHOT PAGES:",
+      result.pages.length
+    );
+
+    if (result.pages.length > 0) {
+      console.log(
+        "PDF FIRST PAGE:",
+        {
+          pageNumber: result.pages[0].pageNumber,
+          width: result.pages[0].width,
+          height: result.pages[0].height,
+          imageLength: result.pages[0].dataUrl?.length ?? 0,
+        }
+      );
+    }
 
     return result.pages.map((page) => ({
       pageNumber: page.pageNumber,
