@@ -1,11 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
-import { pdfToImages } from "@/lib/pdf";
 import { extractQuestions } from "@/lib/extractQuestions";
 import { extractAnswers } from "@/lib/extractAnswers";
 import { mapAnswers } from "@/lib/mapAnswers";
 
+export const runtime = "nodejs";
+
 export async function POST(request: NextRequest) {
   try {
+    console.log("PROCESS START");
+
     const formData = await request.formData();
 
     const questionPaper = formData.get("questionPaper");
@@ -13,27 +16,21 @@ export async function POST(request: NextRequest) {
 
     if (!(questionPaper instanceof File)) {
       return NextResponse.json(
-        { error: "Question paper is required." },
+        {
+          error: "Question paper is required.",
+        },
         { status: 400 }
       );
     }
 
     if (!(answerSheet instanceof File)) {
       return NextResponse.json(
-        { error: "Answer sheet is required." },
+        {
+          error: "Answer sheet is required.",
+        },
         { status: 400 }
       );
     }
-
-    const questionBuffer = Buffer.from(
-      await questionPaper.arrayBuffer()
-    );
-
-    const answerBuffer = Buffer.from(
-      await answerSheet.arrayBuffer()
-    );
-
-    console.log("PROCESS START");
 
     console.log("Question paper:", {
       name: questionPaper.name,
@@ -48,8 +45,22 @@ export async function POST(request: NextRequest) {
     });
 
     /*
-     * Convert question paper PDF into images.
+     * Load PDF.js only when the API request actually needs
+     * PDF processing.
+     *
+     * This prevents pdfjs-dist from being evaluated while
+     * Next.js is loading the route module.
      */
+    const { pdfToImages } = await import("@/lib/pdf");
+
+    const questionBuffer = Buffer.from(
+      await questionPaper.arrayBuffer()
+    );
+
+    const answerBuffer = Buffer.from(
+      await answerSheet.arrayBuffer()
+    );
+
     const questionPages = await pdfToImages(
       questionBuffer,
       questionPaper.type
@@ -60,10 +71,6 @@ export async function POST(request: NextRequest) {
       questionPages.length
     );
 
-    /*
-     * Diagnostic information for the first generated
-     * question-paper image.
-     */
     console.log(
       "QUESTION IMAGE PREFIX:",
       questionPages[0]?.image?.slice(0, 100)
@@ -74,9 +81,6 @@ export async function POST(request: NextRequest) {
       questionPages[0]?.image?.length ?? 0
     );
 
-    /*
-     * Convert answer sheet PDF into images.
-     */
     const answerPages = await pdfToImages(
       answerBuffer,
       answerSheet.type
@@ -97,11 +101,10 @@ export async function POST(request: NextRequest) {
       answerPages[0]?.image?.length ?? 0
     );
 
-    /*
-     * Extract questions from the question-paper images.
-     */
     const questions = await extractQuestions(
-      questionPages.map((page) => page.image)
+      questionPages.map(
+        (page) => page.image
+      )
     );
 
     console.log(
@@ -116,11 +119,10 @@ export async function POST(request: NextRequest) {
       )
     );
 
-    /*
-     * Extract and grade answers.
-     */
     const answers = await extractAnswers(
-      answerPages.map((page) => page.image),
+      answerPages.map(
+        (page) => page.image
+      ),
       questions
     );
 
@@ -136,9 +138,6 @@ export async function POST(request: NextRequest) {
       )
     );
 
-    /*
-     * Map extracted answers to extracted questions.
-     */
     const mappings = mapAnswers(
       questions,
       answers
@@ -159,14 +158,7 @@ export async function POST(request: NextRequest) {
       questions,
       answers,
       mappings,
-
-      /*
-       * Temporarily return the question pages so we can
-       * verify that the PDF is being rendered correctly
-       * on Vercel.
-       */
       questionPages,
-
       answerSheetPages: answerPages,
     });
   } catch (error) {
