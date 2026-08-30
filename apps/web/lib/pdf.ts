@@ -10,31 +10,33 @@ export interface PDFPage {
   image: string;
 }
 
-const standardFontDataUrl = pathToFileURL(
-  path.resolve(
-    process.cwd(),
-    "node_modules",
-    "pdfjs-dist",
-    "standard_fonts"
-  ) + path.sep
-).href;
-
-const workerPath = path.join(
+/*
+ * PDF.js standard fonts are copied into public/pdfjs/standard_fonts
+ * so they are guaranteed to exist in the Vercel deployment.
+ */
+const standardFontDirectory = path.resolve(
   process.cwd(),
   "public",
   "pdfjs",
-  "pdf.worker.mjs"
+  "standard_fonts"
 );
 
-pdfjsLib.GlobalWorkerOptions.workerSrc =
-  pathToFileURL(workerPath).href;
+const standardFontDataUrl =
+  pathToFileURL(
+    standardFontDirectory + path.sep
+  ).href;
 
 export async function pdfToImages(
   buffer: Buffer,
   mimeType: string = "application/pdf"
 ): Promise<PDFPage[]> {
+  /*
+   * Images don't need PDF.js.
+   */
   if (mimeType.startsWith("image/")) {
-    const image = `data:${mimeType};base64,${buffer.toString("base64")}`;
+    const image = `data:${mimeType};base64,${buffer.toString(
+      "base64"
+    )}`;
 
     return [
       {
@@ -46,6 +48,13 @@ export async function pdfToImages(
     ];
   }
 
+  /*
+   * Load the PDF.
+   *
+   * useWorkerFetch: false ensures PDF.js uses the supplied
+   * local standard font directory instead of attempting
+   * to fetch the fonts through a worker.
+   */
   const pdf = await pdfjsLib.getDocument({
     data: new Uint8Array(buffer),
     useWorkerFetch: false,
@@ -54,7 +63,11 @@ export async function pdfToImages(
 
   const pages: PDFPage[] = [];
 
-  for (let pageNumber = 1; pageNumber <= pdf.numPages; pageNumber++) {
+  for (
+    let pageNumber = 1;
+    pageNumber <= pdf.numPages;
+    pageNumber++
+  ) {
     const page = await pdf.getPage(pageNumber);
 
     const viewport = page.getViewport({
@@ -69,8 +82,10 @@ export async function pdfToImages(
     const context = canvas.getContext("2d");
 
     await page.render({
-      canvas: canvas as unknown as HTMLCanvasElement,
-      canvasContext: context as unknown as CanvasRenderingContext2D,
+      canvas:
+        canvas as unknown as HTMLCanvasElement,
+      canvasContext:
+        context as unknown as CanvasRenderingContext2D,
       viewport,
     }).promise;
 
