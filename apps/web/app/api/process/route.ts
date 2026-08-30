@@ -34,6 +34,7 @@ export async function POST(request: NextRequest) {
     );
 
     console.log("PROCESS START");
+
     console.log("Question paper:", {
       name: questionPaper.name,
       type: questionPaper.type,
@@ -77,7 +78,9 @@ export async function POST(request: NextRequest) {
 
     console.log(
       "QUESTION NUMBERS:",
-      questions.map((question) => question.number)
+      questions.map(
+        (question) => question.number
+      )
     );
 
     const answers = await extractAnswers(
@@ -92,7 +95,9 @@ export async function POST(request: NextRequest) {
 
     console.log(
       "ANSWER QUESTION NUMBERS:",
-      answers.map((answer) => answer.questionNumber)
+      answers.map(
+        (answer) => answer.questionNumber
+      )
     );
 
     const mappings = mapAnswers(

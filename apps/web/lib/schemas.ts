@@ -16,9 +16,6 @@ export const questionSchema = z.object({
 });
 
 export const questionExtractionSchema = z.object({
-  // At least one question must be extracted.
-  // This prevents an empty AI response from silently
-  // continuing into answer mapping.
   questions: z.array(questionSchema).min(1),
 });
 

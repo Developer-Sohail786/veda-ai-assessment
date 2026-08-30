@@ -109,17 +109,23 @@ export async function extractQuestions(
   try {
     const questions = await extractQuestionsOnce(images);
 
+    console.log(
+      `Question extraction attempt 1 returned ${questions.length} questions`
+    );
+
     if (questions.length > 0) {
       return applyAIMarks(questions);
     }
   } catch (error) {
     lastError = error;
+
     console.warn(
-      "Question extraction attempt 1 failed. Retrying..."
+      "Question extraction attempt 1 failed:",
+      error
     );
   }
 
-  // Retry once if the first attempt failed or returned no questions.
+  // Retry once
   try {
     console.log(
       "Retrying question extraction..."
@@ -127,19 +133,32 @@ export async function extractQuestions(
 
     const questions = await extractQuestionsOnce(images);
 
-    if (questions.length > 0) {
-      console.log(
-        `Question extraction retry succeeded: ${questions.length} questions`
-      );
+    console.log(
+      `Question extraction attempt 2 returned ${questions.length} questions`
+    );
 
+    if (questions.length > 0) {
       return applyAIMarks(questions);
     }
   } catch (error) {
     lastError = error;
+
     console.error(
-      "Question extraction attempt 2 failed:",
+      "QUESTION EXTRACTION FINAL ERROR:",
       error
     );
+
+    if (error instanceof Error) {
+      console.error(
+        "QUESTION EXTRACTION ERROR MESSAGE:",
+        error.message
+      );
+
+      console.error(
+        "QUESTION EXTRACTION ERROR STACK:",
+        error.stack
+      );
+    }
   }
 
   throw new Error(
