@@ -16,7 +16,7 @@ export const questionSchema = z.object({
 });
 
 export const questionExtractionSchema = z.object({
-  questions: z.array(questionSchema).min(1),
+  questions: z.array(questionSchema),
 });
 
 export const boundingBoxSchema = z.object({
