@@ -45,11 +45,7 @@ export async function POST(request: NextRequest) {
     });
 
     /*
-     * Load PDF.js only when the API request actually needs
-     * PDF processing.
-     *
-     * This prevents pdfjs-dist from being evaluated while
-     * Next.js is loading the route module.
+     * Load PDF processing only when the API request needs it.
      */
     const { pdfToImages } = await import("@/lib/pdf");
 
@@ -61,6 +57,14 @@ export async function POST(request: NextRequest) {
       await answerSheet.arrayBuffer()
     );
 
+    /*
+     * QUESTION PAPER
+     *
+     * pdfToImages() currently returns PDFPage[].
+     * We still render the pages because the existing result
+     * structure expects questionPages, but question extraction
+     * itself now uses the PDF's native text.
+     */
     const questionPages = await pdfToImages(
       questionBuffer,
       questionPaper.type
@@ -81,6 +85,53 @@ export async function POST(request: NextRequest) {
       questionPages[0]?.image?.length ?? 0
     );
 
+    /*
+     * Extract the native text from the question PDF.
+     *
+     * We use pdf-parse directly here because the rendered
+     * question screenshot is unreliable in the deployment
+     * environment, while PDF text extraction has been verified
+     * to work correctly.
+     */
+    const { PDFParse } = await import("pdf-parse");
+
+  const questionParser = new PDFParse({
+  data: questionBuffer,
+});
+
+    let questionText = "";
+
+    try {
+      const textResult =
+        await questionParser.getText();
+
+      questionText = textResult.text ?? "";
+
+      console.log(
+        "QUESTION TEXT LENGTH:",
+        questionText.length
+      );
+
+      console.log(
+        "QUESTION TEXT:",
+        questionText
+      );
+    } finally {
+      await questionParser.destroy();
+    }
+
+    if (!questionText.trim()) {
+      throw new Error(
+        "Unable to extract text from the question paper."
+      );
+    }
+
+    /*
+     * ANSWER SHEET
+     *
+     * Keep rendering the answer sheet because it contains
+     * handwritten answers.
+     */
     const answerPages = await pdfToImages(
       answerBuffer,
       answerSheet.type
@@ -101,10 +152,11 @@ export async function POST(request: NextRequest) {
       answerPages[0]?.image?.length ?? 0
     );
 
+    /*
+     * Extract questions from the native PDF text.
+     */
     const questions = await extractQuestions(
-      questionPages.map(
-        (page) => page.image
-      )
+      questionText
     );
 
     console.log(
@@ -119,6 +171,9 @@ export async function POST(request: NextRequest) {
       )
     );
 
+    /*
+     * Extract handwritten answers from rendered images.
+     */
     const answers = await extractAnswers(
       answerPages.map(
         (page) => page.image
@@ -138,6 +193,9 @@ export async function POST(request: NextRequest) {
       )
     );
 
+    /*
+     * Map answers to questions.
+     */
     const mappings = mapAnswers(
       questions,
       answers
@@ -158,6 +216,8 @@ export async function POST(request: NextRequest) {
       questions,
       answers,
       mappings,
+
+      // Keep the existing response structure.
       questionPages,
       answerSheetPages: answerPages,
     });
@@ -178,7 +238,3 @@ export async function POST(request: NextRequest) {
     );
   }
 }
-
-// 
-// 
-// 
