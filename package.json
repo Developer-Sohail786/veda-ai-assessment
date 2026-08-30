@@ -10,8 +10,5 @@
     "build": "npm run build --workspace=apps/web",
     "start": "npm run start --workspace=apps/web",
     "lint": "npm run lint --workspace=apps/web"
-  },
-  "dependencies": {
-    "@napi-rs/canvas": "^1.0.8"
   }
 }
