@@ -13,7 +13,7 @@ export interface PDFPage {
   image: string;
 }
 
-// PDF.js requires these browser APIs when rendering PDFs in Node.
+// PDF.js requires these browser-like APIs when rendering PDFs in Node.
 if (typeof globalThis.DOMMatrix === "undefined") {
   globalThis.DOMMatrix =
     DOMMatrix as unknown as typeof globalThis.DOMMatrix;
@@ -33,6 +33,7 @@ export async function pdfToImages(
   buffer: Buffer,
   mimeType: string = "application/pdf"
 ): Promise<PDFPage[]> {
+  // Handle image uploads directly.
   if (mimeType.startsWith("image/")) {
     const image = `data:${mimeType};base64,${buffer.toString("base64")}`;
 
@@ -47,24 +48,25 @@ export async function pdfToImages(
   }
 
   /*
-   * The worker is copied into our application so that it has a stable
-   * location in both local development and the Vercel deployment.
+   * The worker is stored inside the server-side application code:
    *
-   * process.cwd() is apps/web when Next.js runs the application.
+   * apps/web/lib/pdfjs/pdf.worker.mjs
+   *
+   * Next.js runs with apps/web as the working directory.
    */
   const workerPath = path.resolve(
     process.cwd(),
-    "public",
+    "lib",
     "pdfjs",
     "pdf.worker.mjs"
   );
 
   const workerUrl = pathToFileURL(workerPath).href;
 
-  // Import after the canvas globals have been initialized.
+  // Import after initializing the canvas globals.
   const { PDFParse } = await import("pdf-parse");
 
-  // Explicitly tell pdf-parse/pdfjs-dist which worker to use.
+  // Explicitly configure PDF.js to use our bundled worker.
   PDFParse.setWorker(workerUrl);
 
   const parser = new PDFParse({
