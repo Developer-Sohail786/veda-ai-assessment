@@ -3,6 +3,8 @@ import {
   ImageData,
   Path2D,
 } from "@napi-rs/canvas";
+import path from "node:path";
+import { pathToFileURL } from "node:url";
 
 export interface PDFPage {
   pageNumber: number;
@@ -11,7 +13,7 @@ export interface PDFPage {
   image: string;
 }
 
-// Make the canvas APIs available globally before pdf-parse/pdfjs-dist loads.
+// PDF.js requires these browser APIs when rendering PDFs in Node.
 if (typeof globalThis.DOMMatrix === "undefined") {
   globalThis.DOMMatrix =
     DOMMatrix as unknown as typeof globalThis.DOMMatrix;
@@ -44,8 +46,26 @@ export async function pdfToImages(
     ];
   }
 
-  // Load pdf-parse after the canvas globals are initialized.
+  /*
+   * The worker is copied into our application so that it has a stable
+   * location in both local development and the Vercel deployment.
+   *
+   * process.cwd() is apps/web when Next.js runs the application.
+   */
+  const workerPath = path.resolve(
+    process.cwd(),
+    "public",
+    "pdfjs",
+    "pdf.worker.mjs"
+  );
+
+  const workerUrl = pathToFileURL(workerPath).href;
+
+  // Import after the canvas globals have been initialized.
   const { PDFParse } = await import("pdf-parse");
+
+  // Explicitly tell pdf-parse/pdfjs-dist which worker to use.
+  PDFParse.setWorker(workerUrl);
 
   const parser = new PDFParse({
     data: buffer,
