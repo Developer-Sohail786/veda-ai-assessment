@@ -17,8 +17,8 @@ export interface PDFPage {
 }
 
 /*
- * PDF.js requires DOMMatrix and Path2D when running
- * in a Node.js environment.
+ * PDF.js may require DOMMatrix and Path2D when running
+ * in the Node.js/Vercel environment.
  *
  * @napi-rs/canvas provides these implementations.
  */
@@ -51,24 +51,24 @@ const standardFontDataUrl = pathToFileURL(
 ).href;
 
 /*
- * PDF.js fake-worker source.
+ * PDF.js worker.
  *
- * The worker exists as a real file inside the deployed
- * application:
+ * The worker is stored inside the server-side lib directory:
  *
- * public/pdfjs/pdf.worker.mjs
+ * apps/web/lib/pdf.worker.mjs
  *
- * We use a file:// URL because this code executes on
- * the Node.js server, not in the browser.
+ * This avoids relying on Next.js/Webpack's generated
+ * worker chunk.
  */
 const workerPath = path.resolve(
   process.cwd(),
-  "public",
-  "pdfjs",
+  "lib",
   "pdf.worker.mjs"
 );
 
-const workerSrc = pathToFileURL(workerPath).href;
+const workerSrc = pathToFileURL(
+  workerPath
+).href;
 
 pdfjsLib.GlobalWorkerOptions.workerSrc =
   workerSrc;
@@ -78,7 +78,8 @@ export async function pdfToImages(
   mimeType: string = "application/pdf"
 ): Promise<PDFPage[]> {
   /*
-   * Images don't require PDF.js.
+   * If the uploaded file is already an image,
+   * no PDF processing is required.
    */
   if (mimeType.startsWith("image/")) {
     const image = `data:${mimeType};base64,${buffer.toString(

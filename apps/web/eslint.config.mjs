@@ -7,17 +7,13 @@ const eslintConfig = defineConfig([
   ...nextTs,
 
   globalIgnores([
-    // Next.js generated files
     ".next/**",
     "out/**",
     "build/**",
     "next-env.d.ts",
 
-    // Dependencies
-    "**/node_modules/**",
-
-    // PDF.js worker copied to public for production
-    "public/pdfjs/**",
+    // PDF.js worker copied from node_modules.
+    "**/pdf.worker.mjs",
   ]),
 ]);
 
