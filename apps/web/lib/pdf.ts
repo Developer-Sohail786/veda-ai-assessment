@@ -48,11 +48,9 @@ export async function pdfToImages(
   }
 
   /*
-   * The worker is stored inside the server-side application code:
+   * Worker bundled inside the application:
    *
    * apps/web/lib/pdfjs/pdf.worker.mjs
-   *
-   * Next.js runs with apps/web as the working directory.
    */
   const workerPath = path.resolve(
     process.cwd(),
@@ -63,14 +61,33 @@ export async function pdfToImages(
 
   const workerUrl = pathToFileURL(workerPath).href;
 
+  /*
+   * Standard PDF fonts bundled inside the application:
+   *
+   * apps/web/public/pdfjs/standard_fonts/
+   */
+  const standardFontPath =
+    path.resolve(
+      process.cwd(),
+      "public",
+      "pdfjs",
+      "standard_fonts"
+    ) + path.sep;
+
+  const standardFontUrl =
+    pathToFileURL(standardFontPath).href;
+
   // Import after initializing the canvas globals.
   const { PDFParse } = await import("pdf-parse");
 
-  // Explicitly configure PDF.js to use our bundled worker.
+  // Explicitly configure the PDF.js worker.
   PDFParse.setWorker(workerUrl);
 
   const parser = new PDFParse({
     data: buffer,
+
+    // Explicitly provide the standard PDF font files.
+    standardFontDataUrl: standardFontUrl,
   });
 
   try {
