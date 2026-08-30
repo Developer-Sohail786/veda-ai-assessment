@@ -11,6 +11,7 @@ const nextConfig: NextConfig = {
     "/api/process/**": [
       "./public/pdfjs/standard_fonts/**",
       "./lib/pdf.worker.mjs",
+      "./node_modules/@napi-rs/canvas/**",
     ],
   },
 };
