@@ -6,6 +6,7 @@ import {
 
 import * as pdfjsLib from "pdfjs-dist/legacy/build/pdf.mjs";
 
+import fs from "node:fs";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 
@@ -38,6 +39,9 @@ if (typeof globalThis.Path2D === "undefined") {
  * These files are stored in:
  *
  * apps/web/public/pdfjs/standard_fonts/
+ *
+ * We verify that the directory exists before giving
+ * it to PDF.js.
  */
 const standardFontDirectory = path.resolve(
   process.cwd(),
@@ -45,6 +49,12 @@ const standardFontDirectory = path.resolve(
   "pdfjs",
   "standard_fonts"
 );
+
+if (!fs.existsSync(standardFontDirectory)) {
+  throw new Error(
+    `PDF standard font directory not found: ${standardFontDirectory}`
+  );
+}
 
 const standardFontDataUrl = pathToFileURL(
   standardFontDirectory + path.sep
@@ -56,15 +66,18 @@ const standardFontDataUrl = pathToFileURL(
  * The worker is stored inside the server-side lib directory:
  *
  * apps/web/lib/pdf.worker.mjs
- *
- * This avoids relying on Next.js/Webpack's generated
- * worker chunk.
  */
 const workerPath = path.resolve(
   process.cwd(),
   "lib",
   "pdf.worker.mjs"
 );
+
+if (!fs.existsSync(workerPath)) {
+  throw new Error(
+    `PDF worker not found: ${workerPath}`
+  );
+}
 
 const workerSrc = pathToFileURL(
   workerPath
@@ -97,11 +110,13 @@ export async function pdfToImages(
   }
 
   /*
-   * Load the PDF.
+   * Load the PDF using PDF.js.
    */
   const pdf = await pdfjsLib.getDocument({
     data: new Uint8Array(buffer),
+
     useWorkerFetch: false,
+
     standardFontDataUrl,
   }).promise;
 
@@ -138,13 +153,18 @@ export async function pdfToImages(
       viewport,
     }).promise;
 
+    const image =
+      canvas.toDataURL("image/png");
+
+    console.info(
+      `PDF PAGE ${pageNumber}: ${viewport.width}x${viewport.height}, image length: ${image.length}`
+    );
+
     pages.push({
       pageNumber,
       width: viewport.width,
       height: viewport.height,
-      image: canvas.toDataURL(
-        "image/png"
-      ),
+      image,
     });
   }
 
