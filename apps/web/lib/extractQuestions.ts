@@ -2,11 +2,7 @@ import { generateObject } from "ai";
 import { gemini } from "./gemini";
 import { questionExtractionSchema } from "./schemas";
 
-export async function extractQuestions(images: string[]) {
-  const { object } = await generateObject({
-    model: gemini,
-    schema: questionExtractionSchema,
-   system: `
+const systemPrompt = `
 You extract questions from an exam question paper.
 
 For every question:
@@ -73,8 +69,22 @@ not the student's actual answer.
 
 Never use 0 marks.
 
+IMPORTANT EXTRACTION REQUIREMENT:
+- The question paper contains one or more actual questions.
+- You MUST extract every clearly visible question.
+- Never intentionally return an empty questions array.
+- If there are multiple pages, inspect all provided pages.
+- Preserve every visible question and sub-question.
+- Do not stop after identifying only the first few questions.
+
 Return only structured question data.
-`,
+`;
+
+async function extractQuestionsOnce(images: string[]) {
+  const { object } = await generateObject({
+    model: gemini,
+    schema: questionExtractionSchema,
+    system: systemPrompt,
     messages: [
       {
         role: "user",
@@ -87,21 +97,79 @@ Return only structured question data.
     ],
   });
 
-  return object.questions.map((question) => {
+  return object.questions;
+}
+
+export async function extractQuestions(
+  images: string[]
+) {
+  let lastError: unknown;
+
+  // First attempt
+  try {
+    const questions = await extractQuestionsOnce(images);
+
+    if (questions.length > 0) {
+      return applyAIMarks(questions);
+    }
+  } catch (error) {
+    lastError = error;
+    console.warn(
+      "Question extraction attempt 1 failed. Retrying..."
+    );
+  }
+
+  // Retry once if the first attempt failed or returned no questions.
+  try {
+    console.log(
+      "Retrying question extraction..."
+    );
+
+    const questions = await extractQuestionsOnce(images);
+
+    if (questions.length > 0) {
+      console.log(
+        `Question extraction retry succeeded: ${questions.length} questions`
+      );
+
+      return applyAIMarks(questions);
+    }
+  } catch (error) {
+    lastError = error;
+    console.error(
+      "Question extraction attempt 2 failed:",
+      error
+    );
+  }
+
+  throw new Error(
+    lastError instanceof Error
+      ? `Unable to extract questions from the question paper: ${lastError.message}`
+      : "Unable to extract questions from the question paper."
+  );
+}
+
+function applyAIMarks(
+  questions: Awaited<
+    ReturnType<typeof extractQuestionsOnce>
+  >
+) {
+  const marksByComplexity = {
+    simple: 1,
+    short: 2,
+    moderate: 3,
+    detailed: 5,
+  } as const;
+
+  return questions.map((question) => {
     if (question.marksSource === "paper") {
       return question;
     }
 
-    const marksByComplexity = {
-      simple: 1,
-      short: 2,
-      moderate: 3,
-      detailed: 5,
-    } as const;
-
     return {
       ...question,
-      marks: marksByComplexity[question.complexity],
+      marks:
+        marksByComplexity[question.complexity],
     };
   });
 }
