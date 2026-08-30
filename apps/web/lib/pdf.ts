@@ -19,6 +19,16 @@ const standardFontDataUrl = pathToFileURL(
   ) + path.sep
 ).href;
 
+const workerPath = path.join(
+  process.cwd(),
+  "public",
+  "pdfjs",
+  "pdf.worker.mjs"
+);
+
+pdfjsLib.GlobalWorkerOptions.workerSrc =
+  pathToFileURL(workerPath).href;
+
 export async function pdfToImages(
   buffer: Buffer,
   mimeType: string = "application/pdf"
