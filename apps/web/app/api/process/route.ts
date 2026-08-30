@@ -47,6 +47,9 @@ export async function POST(request: NextRequest) {
       size: answerSheet.size,
     });
 
+    /*
+     * Convert question paper PDF into images.
+     */
     const questionPages = await pdfToImages(
       questionBuffer,
       questionPaper.type
@@ -57,6 +60,23 @@ export async function POST(request: NextRequest) {
       questionPages.length
     );
 
+    /*
+     * Diagnostic information for the first generated
+     * question-paper image.
+     */
+    console.log(
+      "QUESTION IMAGE PREFIX:",
+      questionPages[0]?.image?.slice(0, 100)
+    );
+
+    console.log(
+      "QUESTION IMAGE LENGTH:",
+      questionPages[0]?.image?.length ?? 0
+    );
+
+    /*
+     * Convert answer sheet PDF into images.
+     */
     const answerPages = await pdfToImages(
       answerBuffer,
       answerSheet.type
@@ -67,6 +87,19 @@ export async function POST(request: NextRequest) {
       answerPages.length
     );
 
+    console.log(
+      "ANSWER IMAGE PREFIX:",
+      answerPages[0]?.image?.slice(0, 100)
+    );
+
+    console.log(
+      "ANSWER IMAGE LENGTH:",
+      answerPages[0]?.image?.length ?? 0
+    );
+
+    /*
+     * Extract questions from the question-paper images.
+     */
     const questions = await extractQuestions(
       questionPages.map((page) => page.image)
     );
@@ -83,6 +116,9 @@ export async function POST(request: NextRequest) {
       )
     );
 
+    /*
+     * Extract and grade answers.
+     */
     const answers = await extractAnswers(
       answerPages.map((page) => page.image),
       questions
@@ -100,6 +136,9 @@ export async function POST(request: NextRequest) {
       )
     );
 
+    /*
+     * Map extracted answers to extracted questions.
+     */
     const mappings = mapAnswers(
       questions,
       answers
@@ -120,6 +159,14 @@ export async function POST(request: NextRequest) {
       questions,
       answers,
       mappings,
+
+      /*
+       * Temporarily return the question pages so we can
+       * verify that the PDF is being rendered correctly
+       * on Vercel.
+       */
+      questionPages,
+
       answerSheetPages: answerPages,
     });
   } catch (error) {
