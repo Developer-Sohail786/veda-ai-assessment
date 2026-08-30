@@ -5,13 +5,12 @@ const nextConfig: NextConfig = {
 
   serverExternalPackages: [
     "@napi-rs/canvas",
-    "pdfjs-dist",
   ],
 
   outputFileTracingIncludes: {
-    "/api/process": [
+    "/api/process/**": [
+      "./public/pdfjs/standard_fonts/**",
       "./lib/pdf.worker.mjs",
-      "./public/pdfjs/standard_fonts/**/*",
     ],
   },
 };
