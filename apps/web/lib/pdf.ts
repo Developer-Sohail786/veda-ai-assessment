@@ -10,10 +10,6 @@ export interface PDFPage {
   image: string;
 }
 
-/*
- * PDF.js standard fonts are copied into public/pdfjs/standard_fonts
- * so they are guaranteed to exist in the Vercel deployment.
- */
 const standardFontDirectory = path.resolve(
   process.cwd(),
   "public",
@@ -21,18 +17,14 @@ const standardFontDirectory = path.resolve(
   "standard_fonts"
 );
 
-const standardFontDataUrl =
-  pathToFileURL(
-    standardFontDirectory + path.sep
-  ).href;
+const standardFontDataUrl = pathToFileURL(
+  standardFontDirectory + path.sep
+).href;
 
 export async function pdfToImages(
   buffer: Buffer,
   mimeType: string = "application/pdf"
 ): Promise<PDFPage[]> {
-  /*
-   * Images don't need PDF.js.
-   */
   if (mimeType.startsWith("image/")) {
     const image = `data:${mimeType};base64,${buffer.toString(
       "base64"
@@ -48,13 +40,6 @@ export async function pdfToImages(
     ];
   }
 
-  /*
-   * Load the PDF.
-   *
-   * useWorkerFetch: false ensures PDF.js uses the supplied
-   * local standard font directory instead of attempting
-   * to fetch the fonts through a worker.
-   */
   const pdf = await pdfjsLib.getDocument({
     data: new Uint8Array(buffer),
     useWorkerFetch: false,
