@@ -2,56 +2,129 @@ import { generateObject } from "ai";
 import { gemini } from "./gemini";
 import { questionExtractionSchema } from "./schemas";
 
-const systemPrompt = `
-You are an exam question-paper extraction system.
+const marksByComplexity = {
+  simple: 1,
+  short: 2,
+  moderate: 3,
+  detailed: 5,
+} as const;
 
-Your ONLY task is to inspect the provided exam question-paper images
-and extract the actual questions visible in them.
+function validateQuestions(
+  questions: Array<{
+    id: string;
+    number: string;
+    text: string;
+    page: number;
+    marks: number;
+    marksSource: "paper" | "ai";
+    complexity: "simple" | "short" | "moderate" | "detailed";
+  }>
+) {
+  return questions
+    .filter(
+      (question) =>
+        question.number.trim().length > 0 &&
+        question.text.trim().length > 0
+    )
+    .map((question) => {
+      if (question.marksSource === "paper") {
+        return question;
+      }
+
+      return {
+        ...question,
+        marks: marksByComplexity[question.complexity],
+      };
+    });
+}
+
+async function extractWithPrompt(
+  images: string[],
+  systemPrompt: string
+) {
+  const { object } = await generateObject({
+    model: gemini,
+    schema: questionExtractionSchema,
+    system: systemPrompt,
+    messages: [
+      {
+        role: "user",
+        content: [
+          {
+            type: "text",
+            text: `
+The following image(s) are the actual exam question paper.
 
 IMPORTANT:
-- Carefully inspect the image visually.
-- Extract EVERY visible question.
-- Preserve the original printed order.
-- Do not invent questions.
-- Do not omit clearly visible questions.
+- Inspect the image visually.
+- Extract the questions that are visibly printed on the paper.
 - Do not return an empty questions array if questions are visible.
+- The question paper may contain printed numbers such as 1., 2., 11(a), 11(b), etc.
+- Preserve those numbers exactly.
+`,
+          },
 
-QUESTION NUMBERING:
-- Extract the question number EXACTLY as printed.
+          ...images.map((image) => ({
+            type: "file" as const,
+            data: image,
+            mediaType: "image/png" as const,
+          })),
+        ],
+      },
+    ],
+  });
+
+  return object.questions;
+}
+
+const basePrompt = `
+You extract questions from an exam question paper.
+
+The provided image is the question paper itself.
+
+For every visible question:
+
+EXTRACTION:
+- Extract the EXACT question number exactly as it appears on the paper.
+- Extract the question text accurately.
+- Preserve the original printed order.
+- Include the page number.
+- Treat labelled sub-parts such as 11(a) and 11(b) as separate questions.
+- Do not include headings, instructions, examples, or answers.
+- Only extract actual questions printed on the paper.
+
+QUESTION NUMBERING — CRITICAL:
 - NEVER renumber questions.
-- NEVER replace a printed number with a sequential number.
-- Preserve letters, parentheses, dots, and other meaningful labels.
-- If the paper shows "11(a)", return "11(a)".
-- If the paper shows "11(b)", return "11(b)".
-- "11(a)" and "11(b)" MUST be returned as separate questions.
-- Do not convert "11(a)" into "6", "7", or "11".
-- Do not assume question numbers are sequential.
-- If numbering skips from 5 to 11(a), preserve the printed numbering.
+- NEVER replace the printed question number with a sequential number.
+- The printed question number is authoritative.
+- If the paper shows "11(a)", return exactly "11(a)".
+- If the paper shows "11(b)", return exactly "11(b)".
+- Keep the lettered sub-part attached to its parent number.
+- Preserve parentheses, letters, and other meaningful sub-part labels.
+- Do not convert "11(a)" into "6", "7", "11", or any other number.
+- Do not assume that question numbers are sequential.
+- If numbering skips from 5 to 11(a), preserve that numbering exactly.
+- If the paper contains 11(a) and 11(b), return TWO separate questions with numbers "11(a)" and "11(b)".
 
-QUESTION TEXT:
-- Transcribe the actual question accurately.
-- Preserve the meaning of the original question.
-- Do not include headings or general instructions.
-- Do not include sample answers.
-- Do not include marks as part of the question text unless the marks are naturally part of the printed question.
-
-PAGE:
-- Return the page number on which the question appears.
-- Page numbering starts at 1.
-- If a question appears on page 2, return page: 2.
+PAGE NUMBER:
+- The first supplied image is page 1.
+- The second supplied image is page 2.
+- Continue sequentially for additional images.
+- Return the page containing the question.
 
 MARKS:
 
-First determine whether marks are explicitly printed for the question.
+First inspect the question paper carefully for explicitly printed marks.
 
 IF MARKS ARE PRINTED:
 - Use the exact printed mark value.
 - Set marksSource to "paper".
-- Do not modify the printed value.
+- Do not modify the value.
+- Determine complexity separately.
 
 IF MARKS ARE NOT PRINTED:
 - Set marksSource to "ai".
-- Determine the expected complexity of the QUESTION.
+- Classify the question into exactly one complexity level.
 
 simple:
 A single definition, fact, identification, or very short response.
@@ -65,128 +138,124 @@ An explanation requiring several relevant points, steps, or concepts.
 detailed:
 A long explanation, multi-part response, derivation, analysis, or complex task.
 
-AI MARK MAPPING:
-- simple → 1
-- short → 2
-- moderate → 3
-- detailed → 5
+For AI-estimated marks use exactly:
+- simple → 1 mark
+- short → 2 marks
+- moderate → 3 marks
+- detailed → 5 marks
 
-Never use 4 marks for AI-estimated questions.
+Do not use 4 marks for AI-estimated questions.
+Do not assign 5 marks to simple or short questions.
+Do not assign 2 marks to a simple definition merely because the answer could contain more detail.
+Do not make all questions worth the same marks.
+
+The complexity must describe the expected answer required by the QUESTION,
+not the student's actual answer.
+
 Never use 0 marks.
 
-IMPORTANT:
-The complexity describes what the question expects from the student,
-NOT what the student actually answered.
+REQUIRED OUTPUT:
+- Return at least one question whenever at least one actual question is visible in the supplied image.
+- Do not return headings or instructions as questions.
+- Do not invent questions that are not visible.
+- Do not invent question numbers.
+- Do not invent question text.
 
-OUTPUT:
-Return structured question data only.
+Return only structured question data.
 `;
 
-function dataUrlToBytes(dataUrl: string): Uint8Array {
-  const commaIndex = dataUrl.indexOf(",");
+const retryPrompt = `
+You are retrying extraction of an exam question paper because the previous
+attempt incorrectly returned zero questions.
 
-  if (commaIndex === -1) {
-    throw new Error(
-      "Invalid image data URL."
-    );
-  }
+This is a VISUAL OCR task.
 
-  const base64 = dataUrl.slice(
-    commaIndex + 1
-  );
+Look directly at the supplied image and identify every actual printed question.
 
-  return new Uint8Array(
-    Buffer.from(base64, "base64")
-  );
+The image contains an exam question paper. It is expected to contain visible
+questions.
+
+DO NOT return:
+{
+  "questions": []
 }
 
-async function extractQuestionsOnce(
-  images: string[]
-) {
-  const { object } = await generateObject({
-    model: gemini,
-    schema: questionExtractionSchema,
-    system: systemPrompt,
+if any question is visible.
 
-    messages: [
-      {
-        role: "user",
-        content: images.map((image) => ({
-          type: "file" as const,
-          data: dataUrlToBytes(image),
-          mediaType: "image/png",
-        })),
-      },
-    ],
-  });
+Instead:
 
-  return object.questions;
-}
+1. Read the printed question numbers directly from the image.
+2. Read the corresponding question text.
+3. Preserve the exact printed numbering.
+4. Preserve lettered sub-parts such as 11(a) and 11(b).
+5. Preserve printed order.
+6. Include the correct page number.
+7. Ignore headings, instructions and examples.
+8. Do not invent content that cannot be seen.
 
-function applyAIMarks(
-  questions: Awaited<
-    ReturnType<typeof extractQuestionsOnce>
-  >
-) {
-  const marksByComplexity = {
-    simple: 1,
-    short: 2,
-    moderate: 3,
-    detailed: 5,
-  } as const;
+QUESTION NUMBERING:
+- "1." stays "1."
+- "2." stays "2."
+- "11(a)" stays "11(a)"
+- "11(b)" stays "11(b)"
+- Never sequentially renumber the questions.
 
-  return questions.map((question) => {
-    if (question.marksSource === "paper") {
-      return question;
-    }
+MARKS:
+If printed marks are visible, use them exactly and set marksSource to "paper".
 
-    return {
-      ...question,
-      marks:
-        marksByComplexity[
-          question.complexity
-        ],
-    };
-  });
-}
+If marks are not printed, classify complexity:
 
-export async function extractQuestions(
-  images: string[]
-) {
+simple → 1
+short → 2
+moderate → 3
+detailed → 5
+
+Set marksSource to "ai" for estimated marks.
+
+The final response must contain the questions that are actually visible
+in the image.
+`;
+
+export async function extractQuestions(images: string[]) {
   if (!images.length) {
     throw new Error(
-      "No question-paper images were generated."
+      "No question-paper images were provided."
     );
   }
 
-  let lastError: unknown;
+  let firstError: unknown = null;
 
   /*
    * First extraction attempt.
    */
   try {
-    console.log(
+    console.info(
       "QUESTION EXTRACTION: attempt 1"
     );
 
-    const questions =
-      await extractQuestionsOnce(images);
+    const questions = await extractWithPrompt(
+      images,
+      basePrompt
+    );
 
-    console.log(
+    console.info(
       "QUESTION EXTRACTION: attempt 1 returned",
       questions.length,
       "questions"
     );
 
-    if (questions.length > 0) {
-      return applyAIMarks(questions);
+    const cleanedQuestions =
+      validateQuestions(questions);
+
+    if (cleanedQuestions.length > 0) {
+      return cleanedQuestions;
     }
 
-    lastError = new Error(
-      "The AI returned zero questions."
+    console.warn(
+      "QUESTION EXTRACTION: attempt 1 returned zero valid questions"
     );
   } catch (error) {
-    lastError = error;
+    firstError = error;
 
     console.warn(
       "QUESTION EXTRACTION: attempt 1 failed",
@@ -195,44 +264,49 @@ export async function extractQuestions(
   }
 
   /*
-   * Retry with the same image data.
-   * The schema requires at least one question,
-   * so a successful response must contain
-   * actual extracted questions.
+   * Second attempt uses a deliberately different,
+   * more explicit visual-extraction prompt.
    */
+  console.info(
+    "QUESTION EXTRACTION: retrying with visual OCR prompt"
+  );
+
   try {
-    console.log(
-      "QUESTION EXTRACTION: retrying"
+    const questions = await extractWithPrompt(
+      images,
+      retryPrompt
     );
 
-    const questions =
-      await extractQuestionsOnce(images);
-
-    console.log(
+    console.info(
       "QUESTION EXTRACTION: retry returned",
       questions.length,
       "questions"
     );
 
-    if (questions.length > 0) {
-      return applyAIMarks(questions);
+    const cleanedQuestions =
+      validateQuestions(questions);
+
+    if (cleanedQuestions.length > 0) {
+      return cleanedQuestions;
     }
 
-    lastError = new Error(
-      "The AI returned zero questions on the retry."
+    throw new Error(
+      "The model returned zero visible questions."
     );
-  } catch (error) {
-    lastError = error;
-
+  } catch (retryError) {
     console.error(
       "QUESTION EXTRACTION: retry failed",
-      error
+      retryError
+    );
+
+    throw new Error(
+      `Unable to extract questions from the question paper: ${
+        retryError instanceof Error
+          ? retryError.message
+          : firstError instanceof Error
+            ? firstError.message
+            : "No questions were extracted."
+      }`
     );
   }
-
-  throw new Error(
-    lastError instanceof Error
-      ? `Unable to extract questions from the question paper: ${lastError.message}`
-      : "Unable to extract questions from the question paper."
-  );
 }
